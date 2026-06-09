@@ -853,9 +853,6 @@ def load_transactions():
         # Sort by date (newest first)
         df = df.sort_values(["date", "id"], ascending=[False, True]).reset_index(drop=True)
         
-        # Re-assign clean sequential IDs for Guest Mode (this fixes randomness)
-        if not st.session_state.get("current_user"):
-            df["id"] = range(1, len(df) + 1)
     else:
         df = empty_transactions_df()
 
@@ -1258,8 +1255,10 @@ with st.form("transaction_form", clear_on_submit=True):
         else:
             next_id = None
             if not st.session_state.current_user:
-                # For Guest Mode: Use simple sequential ID based on current count
-                next_id = len(transactions) + 1
+                if transactions.empty:
+                    next_id = 1
+                else:
+                    next_id = int(transactions["id"].max()) + 1
 
 
             new_transaction = {
@@ -1373,7 +1372,7 @@ if not filtered.empty:
     # UI polish: show received/spent direction directly in the amount cell.
     display_df["amount"] = display_df.apply(format_display_amount, axis=1)
     display_df["transaction_type"] = display_df["transaction_type"].map(type_label)
-    display_df = display_df.drop(columns=["id"])
+    display_df = display_df.drop(columns=["#"])
     display_df = display_df.rename(columns={
         "display_id": "ID",
         "date": t("date"),
@@ -1411,13 +1410,24 @@ else:
 st.subheader(t("edit_delete"))
 
 if not filtered.empty:
-    edit_choices = add_display_numbers(filtered)[["display_id", "id"]]
-    edit_labels = edit_choices["display_id"].astype(str).tolist()
-    selected_edit_label = st.selectbox(t("select_transaction"), options=edit_labels)
-    edit_id = edit_choices.loc[
-        edit_choices["display_id"] == int(selected_edit_label),
-        "id",
-    ].iloc[0]
+    transaction_options = {}
+
+    for _, row in filtered.iterrows():
+        label = (
+            f"{pd.to_datetime(row['date']).strftime('%d/%m/%Y')} | "
+            f"{row['network']} | "
+            f"{row['transaction_type']} | "
+            f"MWK {format_money(row['amount'])}"
+        )
+
+        transaction_options[label] = row["id"]
+
+    selected_label = st.selectbox(
+        t("select_transaction"),
+        list(transaction_options.keys())
+    )
+
+    edit_id = transaction_options[selected_label]
 
     if not st.session_state.current_user and str(edit_id).isdigit():
         edit_id = int(edit_id)
