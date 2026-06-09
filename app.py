@@ -839,19 +839,25 @@ def load_transactions():
         df = df.dropna(subset=["id"]).copy()
         df["id"] = df["id"].astype(int)
         
-        # Ensure IDs are unique and sorted properly
-        df = df.sort_values(["date", "id"], ascending=[False, True]).reset_index(drop=True)
         df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0)
         df["date"] = pd.to_datetime(df["date"], errors="coerce")
         df["date"] = df["date"].fillna(pd.Timestamp(date.today()))
         df["date"] = df["date"].dt.strftime("%Y-%m-%d")
+        
         df["network"] = df["network"].where(df["network"].isin(NETWORKS), NETWORKS[0])
         df["transaction_type"] = df["transaction_type"].where(
-            df["transaction_type"].isin(TRANSACTION_TYPES),
-            "Other",
+            df["transaction_type"].isin(TRANSACTION_TYPES), "Other"
         )
         df["note"] = df["note"].fillna("")
+        
+        # Sort by date (newest first)
         df = df.sort_values(["date", "id"], ascending=[False, True]).reset_index(drop=True)
+        
+        # Re-assign clean sequential IDs for Guest Mode (this fixes randomness)
+        if not st.session_state.get("current_user"):
+            df["id"] = range(1, len(df) + 1)
+    else:
+        df = empty_transactions_df()
 
     return df.reset_index(drop=True)
 
@@ -1252,13 +1258,8 @@ with st.form("transaction_form", clear_on_submit=True):
         else:
             next_id = None
             if not st.session_state.current_user:
-                if transactions.empty:
-                    next_id = 1
-                else:
-                    # More reliable way to get next ID
-                    current_ids = pd.to_numeric(transactions["id"], errors='coerce')
-                    max_id = current_ids.max()
-                    next_id = int(max_id) + 1 if pd.notna(max_id) else 1
+                # For Guest Mode: Use simple sequential ID based on current count
+                next_id = len(transactions) + 1
 
 
             new_transaction = {
