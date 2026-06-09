@@ -496,6 +496,15 @@ st.set_page_config(
     layout="centered",
 )
 
+# Hide Streamlit footer and menu
+hide_st_style = """
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    </style>
+"""
+st.markdown(hide_st_style, unsafe_allow_html=True)
+
 def get_required_secret(key):
     value = st.secrets.get(key, "")
     if not value:
