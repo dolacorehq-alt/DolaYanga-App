@@ -1372,9 +1372,9 @@ if not filtered.empty:
     # UI polish: show received/spent direction directly in the amount cell.
     display_df["amount"] = display_df.apply(format_display_amount, axis=1)
     display_df["transaction_type"] = display_df["transaction_type"].map(type_label)
-    display_df = display_df.drop(columns=["#"])
+    display_df = display_df.drop(columns=["id"])
     display_df = display_df.rename(columns={
-        "display_id": "ID",
+        "display_id": "#",
         "date": t("date"),
         "network": t("network"),
         "transaction_type": t("type"),
