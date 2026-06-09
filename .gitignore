@@ -1,0 +1,17 @@
+# Virtual environment
+.venv/
+venv/
+
+# Streamlit secrets
+.streamlit/secrets.toml
+
+# Data files (local only)
+transactions.csv
+contact_messages.csv
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Other
+.DS_Store
