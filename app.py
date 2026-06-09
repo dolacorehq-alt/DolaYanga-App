@@ -1249,7 +1249,12 @@ with st.form("transaction_form", clear_on_submit=True):
         else:
             next_id = None
             if not st.session_state.current_user:
-                next_id = 1 if transactions.empty else int(pd.to_numeric(transactions["id"]).max()) + 1
+                if transactions.empty:
+                    next_id = 1
+                else:
+                    # Use a stable unique ID (never reused even after deletion)
+                    next_id = int(pd.to_numeric(transactions["id"]).max()) + 1
+
 
             new_transaction = {
                 "id": next_id,
