@@ -838,6 +838,9 @@ def load_transactions():
         df["id"] = pd.to_numeric(df["id"], errors="coerce")
         df = df.dropna(subset=["id"]).copy()
         df["id"] = df["id"].astype(int)
+        
+        # Ensure IDs are unique and sorted properly
+        df = df.sort_values(["date", "id"], ascending=[False, True]).reset_index(drop=True)
         df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0)
         df["date"] = pd.to_datetime(df["date"], errors="coerce")
         df["date"] = df["date"].fillna(pd.Timestamp(date.today()))
@@ -1252,8 +1255,10 @@ with st.form("transaction_form", clear_on_submit=True):
                 if transactions.empty:
                     next_id = 1
                 else:
-                    # Use a stable unique ID (never reused even after deletion)
-                    next_id = int(pd.to_numeric(transactions["id"]).max()) + 1
+                    # More reliable way to get next ID
+                    current_ids = pd.to_numeric(transactions["id"], errors='coerce')
+                    max_id = current_ids.max()
+                    next_id = int(max_id) + 1 if pd.notna(max_id) else 1
 
 
             new_transaction = {
