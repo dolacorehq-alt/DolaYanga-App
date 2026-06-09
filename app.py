@@ -496,6 +496,10 @@ st.set_page_config(
     layout="centered",
 )
 
+logo_path = Path(__file__).parent / "Dola Yanga logo.png"
+if logo_path.exists():
+    st.logo(str(logo_path), size="large")   
+
 # Hide Streamlit footer and menu
 hide_st_style = """
     <style>
