@@ -767,14 +767,11 @@ def load_cloud_transactions(user):
 
     if not df.empty:
         df["date"] = pd.to_datetime(df["date"], errors="coerce")
-
-        df = (
-            df.sort_values(
-                ["date", "id"],
-                ascending=[False, False]
-            )
-            .reset_index(drop=True)
-        )
+        # Consistent sorting: newest date first, then newest id first (most recent entry)
+        df = df.sort_values(
+            ["date", "id"],
+            ascending=[False, False]
+        ).reset_index(drop=True)
 
         df["date"] = df["date"].dt.strftime("%Y-%m-%d")
 
@@ -877,7 +874,7 @@ def load_transactions():
         )
         df["note"] = df["note"].fillna("")
         
-        # Sort by date (newest first)
+        # Consistent sorting applied here too
         df = df.sort_values(["date", "id"], ascending=[False, False]).reset_index(drop=True)
         
     else:
@@ -988,7 +985,6 @@ def calculate_summary(df):
 def show_summary_metrics(df):
     today_spending, month_spending, total_received, total_spent, balance = calculate_summary(df)
 
-    # UI polish: lightweight HTML cards make the key money figures easier to scan on mobile.
     def summary_card(label, value, color, background):
         st.markdown(
             f"""
@@ -1020,7 +1016,6 @@ def show_summary_metrics(df):
         summary_card(t("this_month"), month_spending, "#1d4ed8", "#eff6ff")
         summary_card(t("balance"), balance, balance_color, balance_background)
 
-    # UI polish: Total Spent is kept as a compact red cue below the main cards.
     st.markdown(
         f"""
         <div style="font-size: 0.95rem; color: #b91c1c; font-weight: 600; margin: 0.15rem 0 0.8rem 0;">
@@ -1031,7 +1026,6 @@ def show_summary_metrics(df):
     )
 
 def render_empty_state_onboarding():
-    # UI polish: contextual onboarding appears only for empty transaction sessions.
     with st.container(border=True):
         st.subheader(f"👋 {t('empty_welcome')}")
         st.write(t("empty_description"))
@@ -1332,7 +1326,7 @@ else:
     df_display["date"] = pd.to_datetime(df_display["date"], errors="coerce")
     df_display = df_display.sort_values(
         ["date", "id"],
-        ascending=[False, False],
+        ascending=[False, False]
     ).reset_index(drop=True)
 
     st.subheader(t("combined"))
@@ -1399,7 +1393,6 @@ if not filtered.empty:
 if not filtered.empty:
     display_df = add_display_numbers(filtered)
     display_df["date"] = display_df["date"].dt.strftime(DISPLAY_DATE_FORMAT)
-    # UI polish: show received/spent direction directly in the amount cell.
     display_df["amount"] = display_df.apply(format_display_amount, axis=1)
     display_df["transaction_type"] = display_df["transaction_type"].map(type_label)
     display_df = display_df.drop(columns=["id"])
