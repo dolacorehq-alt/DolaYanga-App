@@ -1595,7 +1595,7 @@ if st.checkbox(t("delete_all")):
             st.rerun()
         except Exception as error:
             st.error(str(error))
-            
+             
 st.markdown("---")
 st.caption(t("footer"))
 
