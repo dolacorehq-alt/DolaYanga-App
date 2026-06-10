@@ -1437,7 +1437,7 @@ if not filtered.empty:
 
     for _, row in filtered.iterrows():
         label = (
-            f"{pd.to_datetime(row['date']).strftime('%d/%m/%Y')} | "
+            f"#{int(row['id'])} | {pd.to_datetime(row['date']).strftime('%d/%m/%Y')} | "
             f"{row['network']} | "
             f"{row['transaction_type']} | "
             f"MWK {format_money(row['amount'])}"
@@ -1580,7 +1580,8 @@ if st.session_state.edit_mode:
 
 st.subheader(t("danger"))
 st.warning(t("confirm_reset"))
-if st.checkbox(t("delete_all")):
+delete_all_checked = st.checkbox(t("delete_all"), key="delete_all_checkbox")
+if delete_all_checked:
     if st.button(t("reset")):
         try:
             if st.session_state.current_user:
@@ -1592,10 +1593,11 @@ if st.checkbox(t("delete_all")):
 
             st.session_state.transactions = empty_transactions_df()
             st.session_state.save_message = t("reset_done")
+            st.session_state["delete_all_checkbox"] = False
             st.rerun()
         except Exception as error:
             st.error(str(error))
-             
+            
 st.markdown("---")
 st.caption(t("footer"))
 
