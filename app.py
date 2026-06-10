@@ -759,7 +759,7 @@ def load_cloud_transactions(user):
         params={
             "select": "*",
             "app_user_id": f"eq.{user['id']}",
-            "order": "transaction_date.desc,created_at.asc,id.asc",
+            "order": "transaction_date.desc,created_at.desc,id.desc",
         },
     )
     return cloud_transactions_to_df(rows)
