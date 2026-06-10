@@ -429,7 +429,7 @@ Ogwiritsa ntchito ali ndi udindo wokumbukira App PIN yawo komanso kusunga chitet
 
 7. Kugwiritsa Ntchito Moyenera
 
-Ogwiritsa ntchito amavomereza kuti sadzagwiritsa ntchito pulogalamuyi pa ntchito zosaloledwa ndi malamulo, kuyesa kuthyolako kapena kusokoneza dongosolo, kusanthula kapena kukopera momwe pulogalamuyi imagwirira ntchito (reverse engineering), kulowetsa deta yabodza kapena yowononga mwadala, kapena kugwiritsa ntchito pulogalamuyi m'njira yomwe ingawononge ogwiritsa ntchito ena kapena ntchito zina.
+Ogwiritsa ntchito amavomereza kuti sadzagwiritsa ntchito pulogalamuyi pa ntchito zosaloledwa ndi malamulo, kuyesa kuthyolako kapena kusokoneza dongosolo, kusanthula kapena kukopera momhow pulogalamuyi imagwirira ntchito (reverse engineering), kulowetsa deta yabodza kapena yowononga mwadala, kapena kugwiritsa ntchito pulogalamuyi m'njira yomwe ingawononge ogwiritsa ntchito ena kapena ntchito zina.
 
 8. Kupezeka kwa Ntchito
 
@@ -955,15 +955,12 @@ def add_display_numbers(df):
     display_df.insert(0, "display_id", range(1, len(display_df) + 1))
     return display_df
 
-# NEW SAFE HELPER FUNCTION
-def safe_int(val, default=0):
-    """Safely convert any value to int, returns default on failure."""
-    try:
-        if pd.isna(val) or val is None or val == "":
-            return default
-        return int(float(val))
-    except (ValueError, TypeError):
-        return default
+# NEW SAFE HELPER FUNCTION - improved
+def safe_id(val):
+    """Safely handle any ID type (int, str, UUID, NaN, etc.)"""
+    if pd.isna(val) or val is None or val == "" or str(val).strip() == "":
+        return "?"
+    return str(val)
 
 def calculate_summary(df):
     if df.empty:
@@ -1444,8 +1441,8 @@ if not filtered.empty:
     transaction_options = {}
 
     for _, row in filtered.iterrows():
-        # ROBUST ID HANDLING - Fixed the crash
-        disp_id = safe_int(row.get('id'), 0)
+        # ROBUST ID HANDLING - Fixed for both guest + cloud (UUID/string/int)
+        disp_id = safe_id(row.get('id'))
         
         try:
             disp_date = pd.to_datetime(row['date']).strftime('%d/%m/%Y')
@@ -1469,9 +1466,12 @@ if not filtered.empty:
 
         edit_id = transaction_options[selected_label]
 
-        # Ensure integer for local mode
-        if not st.session_state.current_user and str(edit_id).isdigit():
-            edit_id = int(edit_id)
+        # Ensure proper type for local mode
+        if not st.session_state.current_user:
+            try:
+                edit_id = int(edit_id) if str(edit_id).isdigit() else edit_id
+            except:
+                pass
 
         edit_col1, edit_col2 = st.columns(2)
         if edit_col1.button(t("edit"), use_container_width=True):
@@ -1495,7 +1495,11 @@ if not filtered.empty:
                 st.error(str(error))
 
 if st.session_state.edit_mode:
-    edit_rows = transactions[transactions["id"] == st.session_state.edit_id]
+    # More robust lookup
+    if st.session_state.current_user:
+        edit_rows = transactions[transactions["id"] == st.session_state.edit_id]
+    else:
+        edit_rows = transactions[transactions["id"].astype(str) == str(st.session_state.edit_id)]
 
     if edit_rows.empty:
         st.session_state.edit_mode = False
@@ -1566,8 +1570,9 @@ if st.session_state.edit_mode:
                         updated_transactions = load_cloud_transactions(st.session_state.current_user)
                     else:
                         updated_transactions = transactions.copy()
+                        mask = updated_transactions["id"].astype(str) == str(st.session_state.edit_id)
                         updated_transactions.loc[
-                            updated_transactions["id"] == st.session_state.edit_id,
+                            mask,
                             ["date", "network", "transaction_type", "amount", "note"],
                         ] = [
                             updated_values["date"],
