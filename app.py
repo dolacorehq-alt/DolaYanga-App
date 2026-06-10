@@ -1282,8 +1282,8 @@ with st.form("transaction_form", clear_on_submit=True):
                     )
                     updated_transactions["date"] = pd.to_datetime(updated_transactions["date"])
                     updated_transactions = updated_transactions.sort_values(
-                        ["date", "id"],
-                        ascending=[False, True],
+                        "id",
+                        ascending=False,
                     ).reset_index(drop=True)
                     updated_transactions["date"] = updated_transactions["date"].dt.strftime("%Y-%m-%d")
 
@@ -1301,9 +1301,9 @@ else:
     df_display = transactions.copy()
     df_display["date"] = pd.to_datetime(df_display["date"], errors="coerce")
     df_display = df_display.sort_values(
-        ["date", "id"],
-        ascending=[False, True],
-    ).reset_index(drop=True)
+        "id",
+        ascending=False,
+    ).reset_index(drop=True)    
 
     st.subheader(t("combined"))
     show_summary_metrics(df_display)
