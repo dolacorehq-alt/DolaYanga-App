@@ -401,7 +401,7 @@ Ogwiritsa ntchito ali ndi udindo wowunika ndi kutsimikizira mbiri yawo ya ndalam
 
 4. Kugwiritsa Ntchito pa Chiwopsezo Chanu
 
-Malinga ndi malamulo ogwira ntchito ku Malawi, pulogalamuyi imaperekedwa momwe ilili ("as is") komanso momhow ikupezekera ("as available").
+Malinga ndi malamulo ogwira ntchito ku Malawi, pulogalamuyi imaperekedwa momhow ilili ("as is") komanso momhow ikupezekera ("as available").
 
 Sititsimikizira kuti pulogalamuyi izigwira ntchito nthawi zonse popanda zolakwika kapena kusokonezeka.
 
@@ -767,7 +767,6 @@ def load_cloud_transactions(user):
 
     if not df.empty:
         df["date"] = pd.to_datetime(df["date"], errors="coerce")
-        # Consistent sorting: newest date first, then newest id first (most recent entry)
         df = df.sort_values(
             ["date", "id"],
             ascending=[False, False]
@@ -874,7 +873,6 @@ def load_transactions():
         )
         df["note"] = df["note"].fillna("")
         
-        # Consistent sorting applied here too
         df = df.sort_values(["date", "id"], ascending=[False, False]).reset_index(drop=True)
         
     else:
@@ -956,6 +954,16 @@ def add_display_numbers(df):
     display_df = df.copy().reset_index(drop=True)
     display_df.insert(0, "display_id", range(1, len(display_df) + 1))
     return display_df
+
+# NEW SAFE HELPER FUNCTION
+def safe_int(val, default=0):
+    """Safely convert any value to int, returns default on failure."""
+    try:
+        if pd.isna(val) or val is None or val == "":
+            return default
+        return int(float(val))
+    except (ValueError, TypeError):
+        return default
 
 def calculate_summary(df):
     if df.empty:
@@ -1436,45 +1444,55 @@ if not filtered.empty:
     transaction_options = {}
 
     for _, row in filtered.iterrows():
+        # ROBUST ID HANDLING - Fixed the crash
+        disp_id = safe_int(row.get('id'), 0)
+        
+        try:
+            disp_date = pd.to_datetime(row['date']).strftime('%d/%m/%Y')
+        except:
+            disp_date = "??/??/????"
+
         label = (
-            f"#{int(row['id'])} | {pd.to_datetime(row['date']).strftime('%d/%m/%Y')} | "
-            f"{row['network']} | "
-            f"{row['transaction_type']} | "
-            f"MWK {format_money(row['amount'])}"
+            f"#{disp_id} | {disp_date} | "
+            f"{row.get('network', 'Unknown')} | "
+            f"{row.get('transaction_type', 'Other')} | "
+            f"MWK {format_money(row.get('amount', 0))}"
         )
 
         transaction_options[label] = row["id"]
 
-    selected_label = st.selectbox(
-        t("select_transaction"),
-        list(transaction_options.keys())
-    )
+    if transaction_options:
+        selected_label = st.selectbox(
+            t("select_transaction"),
+            list(transaction_options.keys())
+        )
 
-    edit_id = transaction_options[selected_label]
+        edit_id = transaction_options[selected_label]
 
-    if not st.session_state.current_user and str(edit_id).isdigit():
-        edit_id = int(edit_id)
+        # Ensure integer for local mode
+        if not st.session_state.current_user and str(edit_id).isdigit():
+            edit_id = int(edit_id)
 
-    edit_col1, edit_col2 = st.columns(2)
-    if edit_col1.button(t("edit"), use_container_width=True):
-        st.session_state.edit_mode = True
-        st.session_state.edit_id = edit_id
-        st.rerun()
-
-    if edit_col2.button(t("delete"), use_container_width=True):
-        try:
-            if st.session_state.current_user:
-                delete_cloud_transaction(st.session_state.current_user, edit_id)
-                record_event("transaction_deleted", st.session_state.current_user)
-                updated_transactions = load_cloud_transactions(st.session_state.current_user)
-            else:
-                updated_transactions = transactions[transactions["id"] != edit_id].reset_index(drop=True)
-
-            st.session_state.transactions = updated_transactions
-            st.session_state.save_message = t("deleted")
+        edit_col1, edit_col2 = st.columns(2)
+        if edit_col1.button(t("edit"), use_container_width=True):
+            st.session_state.edit_mode = True
+            st.session_state.edit_id = edit_id
             st.rerun()
-        except Exception as error:
-            st.error(str(error))
+
+        if edit_col2.button(t("delete"), use_container_width=True):
+            try:
+                if st.session_state.current_user:
+                    delete_cloud_transaction(st.session_state.current_user, edit_id)
+                    record_event("transaction_deleted", st.session_state.current_user)
+                    updated_transactions = load_cloud_transactions(st.session_state.current_user)
+                else:
+                    updated_transactions = transactions[transactions["id"] != edit_id].reset_index(drop=True)
+
+                st.session_state.transactions = updated_transactions
+                st.session_state.save_message = t("deleted")
+                st.rerun()
+            except Exception as error:
+                st.error(str(error))
 
 if st.session_state.edit_mode:
     edit_rows = transactions[transactions["id"] == st.session_state.edit_id]
