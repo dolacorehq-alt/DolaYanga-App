@@ -1285,6 +1285,7 @@ with st.form("transaction_form", clear_on_submit=True):
                         ["date", "id"],
                         ascending=[False, False],
                     ).reset_index(drop=True)
+                    updated_transactions["date"] = updated_transactions["date"].dt.strftime("%Y-%m-%d")
 
                 st.session_state.transactions = updated_transactions
                 st.session_state.last_network = network
@@ -1537,7 +1538,7 @@ if st.session_state.edit_mode:
                         updated_transactions["date"] = pd.to_datetime(updated_transactions["date"])
                         updated_transactions = updated_transactions.sort_values(
                             ["date", "id"],
-                            ascending=[False, True],
+                            ascending=[False, False],
                         ).reset_index(drop=True)
                         updated_transactions["date"] = updated_transactions["date"].dt.strftime("%Y-%m-%d")
 
