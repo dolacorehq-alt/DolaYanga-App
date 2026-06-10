@@ -851,7 +851,7 @@ def load_transactions():
         df["note"] = df["note"].fillna("")
         
         # Sort by date (newest first)
-        df = df.sort_values(["date", "id"], ascending=[False, True]).reset_index(drop=True)
+        df = df.sort_values(["date", "id"], ascending=[False, False]).reset_index(drop=True)
         
     else:
         df = empty_transactions_df()
@@ -1282,10 +1282,9 @@ with st.form("transaction_form", clear_on_submit=True):
                     )
                     updated_transactions["date"] = pd.to_datetime(updated_transactions["date"])
                     updated_transactions = updated_transactions.sort_values(
-                        "id",
-                        ascending=False,
+                        ["date", "id"],
+                        ascending=[False, False],
                     ).reset_index(drop=True)
-                    updated_transactions["date"] = updated_transactions["date"].dt.strftime("%Y-%m-%d")
 
                 st.session_state.transactions = updated_transactions
                 st.session_state.last_network = network
@@ -1301,9 +1300,9 @@ else:
     df_display = transactions.copy()
     df_display["date"] = pd.to_datetime(df_display["date"], errors="coerce")
     df_display = df_display.sort_values(
-        "id",
-        ascending=False,
-    ).reset_index(drop=True)    
+        ["date", "id"],
+        ascending=[False, False],
+    ).reset_index(drop=True)
 
     st.subheader(t("combined"))
     show_summary_metrics(df_display)
