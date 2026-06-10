@@ -401,7 +401,7 @@ Ogwiritsa ntchito ali ndi udindo wowunika ndi kutsimikizira mbiri yawo ya ndalam
 
 4. Kugwiritsa Ntchito pa Chiwopsezo Chanu
 
-Malinga ndi malamulo ogwira ntchito ku Malawi, pulogalamuyi imaperekedwa momwe ilili ("as is") komanso momwe ikupezekera ("as available").
+Malinga ndi malamulo ogwira ntchito ku Malawi, pulogalamuyi imaperekedwa momwe ilili ("as is") komanso momhow ikupezekera ("as available").
 
 Sititsimikizira kuti pulogalamuyi izigwira ntchito nthawi zonse popanda zolakwika kapena kusokonezeka.
 
@@ -754,36 +754,31 @@ def cloud_transactions_to_df(rows):
     return pd.DataFrame(records, columns=["id", "date", "network", "transaction_type", "amount", "note"])
 
 def load_cloud_transactions(user):
-rows = supabase_request(
-"transactions",
-params={
-"select": "*",
-"app_user_id": f"eq.{user['id']}",
-"order": "transaction_date.desc,id.desc",
-},
-)
-
-```
-df = cloud_transactions_to_df(rows)
-
-if not df.empty:
-    df["date"] = pd.to_datetime(df["date"], errors="coerce")
-
-    df = (
-        df.sort_values(
-            ["date", "id"],
-            ascending=[False, False]
-        )
-        .reset_index(drop=True)
+    rows = supabase_request(
+        "transactions",
+        params={
+            "select": "*",
+            "app_user_id": f"eq.{user['id']}",
+            "order": "transaction_date.desc,id.desc",
+        },
     )
 
-    df["date"] = df["date"].dt.strftime("%Y-%m-%d")
+    df = cloud_transactions_to_df(rows)
 
-return df
-```
+    if not df.empty:
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")
 
+        df = (
+            df.sort_values(
+                ["date", "id"],
+                ascending=[False, False]
+            )
+            .reset_index(drop=True)
+        )
 
+        df["date"] = df["date"].dt.strftime("%Y-%m-%d")
 
+    return df
 
 def insert_cloud_transaction(user, transaction):
     rows = supabase_request(
@@ -830,22 +825,19 @@ def delete_cloud_transaction(user, transaction_id):
     )
 
 def delete_account_and_transactions(user):
+    if not user:
+        raise ValueError("User record not found.")
 
-if not user:
-    raise ValueError("User record not found.")
+    if "phone_number" not in user:
+        full_user = get_user_by_id(user["id"])
 
-if "phone_number" not in user:
-    full_user = get_user_by_id(user["id"])
+        if not full_user:
+            raise ValueError("Unable to load user details.")
 
-    if not full_user:
-        raise ValueError("Unable to load user details.")
+        user = full_user
 
-    user = full_user
-
-record_event("account_deleted", user)
-call_delete_account_function(user)
-```
-
+    record_event("account_deleted", user)
+    call_delete_account_function(user)
 
 def load_registered_users():
     return supabase_request(
@@ -1170,15 +1162,14 @@ with st.expander(t("account"), expanded=False):
                         users_df["id"].tolist(),
                     )
                     if st.button(t("delete_user_account"), use_container_width=True):
-                    selected_user = get_user_by_id(selected_user_id)
+                        selected_user = get_user_by_id(selected_user_id)
 
-                    if selected_user:
-                        delete_account_and_transactions(selected_user)
-                        st.session_state.save_message = t("account_deleted")
-                        st.rerun()
-                    else:
-                        st.error("User not found.")
-```
+                        if selected_user:
+                            delete_account_and_transactions(selected_user)
+                            st.session_state.save_message = t("account_deleted")
+                            st.rerun()
+                        else:
+                            st.error("User not found.")
                 else:
                     st.info(t("no_filtered"))
             except Exception as error:
@@ -1299,7 +1290,6 @@ with st.form("transaction_form", clear_on_submit=True):
                     next_id = 1
                 else:
                     next_id = int(transactions["id"].max()) + 1
-
 
             new_transaction = {
                 "id": next_id,
