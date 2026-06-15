@@ -776,7 +776,7 @@ def load_cloud_transactions(user):
             ["date", "created_at"],
             ascending=[False, False]
         ).reset_index(drop=True)
-
+        st.write(df.dtypes)
         df["date"] = df["date"].dt.strftime("%Y-%m-%d")
 
     return df
