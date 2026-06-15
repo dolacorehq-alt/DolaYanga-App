@@ -1440,17 +1440,16 @@ st.subheader(t("edit_delete"))
 if not filtered.empty:
     transaction_options = {}
 
-    for _, row in filtered.iterrows():
+    for display_num, (_, row) in enumerate(filtered.iterrows(), start=1):
         # ROBUST ID HANDLING - Fixed for both guest + cloud (UUID/string/int)
-        disp_id = safe_id(row.get('id'))
-        
+                
         try:
             disp_date = pd.to_datetime(row['date']).strftime('%d/%m/%Y')
         except:
             disp_date = "??/??/????"
 
         label = (
-            f"#{disp_id} | {disp_date} | "
+            f"#{display_num} | {disp_date} | "
             f"{row.get('network', 'Unknown')} | "
             f"{row.get('transaction_type', 'Other')} | "
             f"MWK {format_money(row.get('amount', 0))}"
