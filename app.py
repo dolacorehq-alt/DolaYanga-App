@@ -749,9 +749,10 @@ def cloud_transactions_to_df(rows):
             "transaction_type": row["transaction_type"],
             "amount": row["amount"],
             "note": row.get("note") or "",
+            "created_at": row.get("created_at"),
         })
 
-    return pd.DataFrame(records, columns=["id", "date", "network", "transaction_type", "amount", "note"])
+    return pd.DataFrame(records, columns=["id", "date", "network", "transaction_type", "amount", "note", "created_at"])
 
 def load_cloud_transactions(user):
     rows = supabase_request(
@@ -759,16 +760,20 @@ def load_cloud_transactions(user):
         params={
             "select": "*",
             "app_user_id": f"eq.{user['id']}",
-            "order": "transaction_date.desc,id.desc",
+            "order": "transaction_date.desc,created_at.desc",
         },
     )
 
     df = cloud_transactions_to_df(rows)
 
     if not df.empty:
-        df["date"] = pd.to_datetime(df["date"], errors="coerce")
+        df["created_at"] = pd.to_datetime(
+            df["created_at"],
+            errors="coerce"
+        )
+
         df = df.sort_values(
-            ["date", "id"],
+            ["date", "created_at"],
             ascending=[False, False]
         ).reset_index(drop=True)
 
