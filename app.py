@@ -767,16 +767,20 @@ def load_cloud_transactions(user):
     df = cloud_transactions_to_df(rows)
 
     if not df.empty:
+        df["date"] = pd.to_datetime(
+        df["date"],
+        errors="coerce"
+        )
+        
         df["created_at"] = pd.to_datetime(
-            df["created_at"],
-            errors="coerce"
+        df["created_at"],
+        errors="coerce"
         )
 
         df = df.sort_values(
             ["date", "created_at"],
             ascending=[False, False]
         ).reset_index(drop=True)
-        st.write(df.dtypes)
         df["date"] = df["date"].dt.strftime("%Y-%m-%d")
 
     return df
