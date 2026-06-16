@@ -1337,12 +1337,27 @@ if transactions.empty:
 else:
     st.header(t("summary"))
     df_display = transactions.copy()
-    df_display["date"] = pd.to_datetime(df_display["date"], errors="coerce")
-    df_display = df_display.sort_values(
-        ["date", "id"],
-        ascending=[False, False]
-    ).reset_index(drop=True)
+    df_display["date"] = pd.to_datetime(
+        df_display["date"],
+        errors="coerce"
+    )
 
+    if "created_at" in df_display.columns:
+        df_display["created_at"] = pd.to_datetime(
+            df_display["created_at"],
+            errors="coerce"
+        )
+
+        df_display = df_display.sort_values(
+            ["date", "created_at"],
+            ascending=[False, False]
+        ).reset_index(drop=True)
+    else:
+        df_display = df_display.sort_values(
+            ["date", "id"],
+            ascending=[False, False]
+        ).reset_index(drop=True)
+    
     st.subheader(t("combined"))
     show_summary_metrics(df_display)
 
