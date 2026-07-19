@@ -107,6 +107,12 @@ TRANSLATIONS = {
         "total_spent": "Total Spent",
         "balance": "Estimated Balance",
         "monthly_breakdown": "Monthly Summary Breakdown",
+        "monthly_insights_expander": "✨ Generate Monthly Insights",
+        "monthly_insights_description": "Get AI-generated insights from your current monthly view (coming soon).",
+        "monthly_insights_min_transactions": "AI insights require at least five transactions in the current view. Adjust your filters or add more transactions.",
+        "monthly_insights_generate": "Generate Insights",
+        "monthly_insights_placeholder": "Monthly Insights is coming soon. This button is a placeholder for the upcoming AI feature.",
+        "monthly_insights_disclaimer": "AI insights are suggestions and may be inaccurate. Always verify before making financial decisions.",
         "transactions": "Transactions",
         "from": "From",
         "to": "To",
@@ -301,6 +307,12 @@ If you have questions about these Terms, contact: dolacorehq@gmail.com""",
         "total_spent": "Zonse Zogwiritsidwa Ntchito",
         "balance": "Balance Yoyerekeza",
         "monthly_breakdown": "Chidule cha Miyezi",
+        "monthly_insights_expander": "✨ Pangani Zozindikira za Mwezi",
+        "monthly_insights_description": "Pezani zozindikira (AI) kuchokera ku ma transaction a mwezi uno (ikubwera posachedwa).",
+        "monthly_insights_min_transactions": "Zozindikira za AI zimafuna ma transaction osachepera asanu (5) mu view yomwe muli nayo pano. Sinthani ma filter kapena onjezani ma transaction.",
+        "monthly_insights_generate": "Pangani Zozindikira",
+        "monthly_insights_placeholder": "Monthly Insights ikubwera posachedwa. Batani ili ndi placeholder ya AI yomwe ikubwera.",
+        "monthly_insights_disclaimer": "Zozindikira za AI ndi malingaliro ndipo zingakhale zolakwika. Nthawi zonse tsimikizani musanapange zisankho za ndalama.",
         "transactions": "Ma Transaction",
         "from": "Kuyambira",
         "to": "Mpaka",
@@ -1086,6 +1098,17 @@ if "auth_mode" not in st.session_state:
 if "transactions" not in st.session_state:
     st.session_state.transactions = empty_transactions_df()
 
+# Initialize filter state with stable, language-agnostic values.
+# This prevents translated labels (e.g., "All Networks") from being stored as filter values and breaking filtering on reruns.
+if "start_date" not in st.session_state:
+    st.session_state.start_date = date.today().replace(day=1)
+
+if "end_date" not in st.session_state:
+    st.session_state.end_date = date.today()
+
+if "network_filter_value" not in st.session_state:
+    st.session_state.network_filter_value = "__all__"
+
 transactions = st.session_state.transactions
 
 language_spacer_col, language_button_col = st.columns([6, 1])
@@ -1389,6 +1412,29 @@ else:
         else:
             st.info(t("no_filtered"))
 
+with st.expander(t("monthly_insights_expander"), expanded=False):
+    st.caption(t("monthly_insights_description"))
+
+    visible_df = df_display.copy()
+    if not visible_df.empty:
+        selected_network = st.session_state.get("network_filter_value", "__all__")
+        if selected_network != "__all__":
+            visible_df = visible_df[visible_df["network"] == selected_network]
+
+        start_date_value = st.session_state.get("start_date", date.today().replace(day=1))
+        end_date_value = st.session_state.get("end_date", date.today())
+        visible_df = visible_df[
+            (visible_df["date"].dt.date >= start_date_value)
+            & (visible_df["date"].dt.date <= end_date_value)
+        ]
+
+    if len(visible_df) < 5:
+        st.info(t("monthly_insights_min_transactions"))
+    else:
+        if st.button(t("monthly_insights_generate"), type="primary", use_container_width=True):
+            st.info(t("monthly_insights_placeholder"))
+            st.caption(t("monthly_insights_disclaimer"))
+
 st.header(t("transactions"))
 
 filter_col1, filter_col2 = st.columns(2)
@@ -1407,12 +1453,17 @@ with filter_col2:
         format=DATE_INPUT_FORMAT,
     )
 
-network_filter = st.selectbox(t("network_filter"), [t("all_networks")] + NETWORKS)
+network_filter_value = st.selectbox(
+    t("network_filter"),
+    ["__all__"] + NETWORKS,
+    key="network_filter_value",
+    format_func=lambda value: t("all_networks") if value == "__all__" else value,
+)
 
 filtered = df_display.copy()
 if not filtered.empty:
-    if network_filter != t("all_networks"):
-        filtered = filtered[filtered["network"] == network_filter]
+    if network_filter_value != "__all__":
+        filtered = filtered[filtered["network"] == network_filter_value]
 
     filtered = filtered[
         (filtered["date"].dt.date >= start_date)
