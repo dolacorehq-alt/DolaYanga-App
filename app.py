@@ -1923,17 +1923,38 @@ if not filtered.empty:
     display_df["date"] = display_df["date"].dt.strftime(DISPLAY_DATE_FORMAT)
     display_df["amount"] = display_df.apply(format_display_amount, axis=1)
     display_df["transaction_type"] = display_df["transaction_type"].map(type_label)
-    display_df = display_df.drop(columns=["id"])
-    display_df = display_df.rename(columns={
-        "display_id": "#",
-        "date": t("date"),
-        "network": t("network"),
-        "transaction_type": t("type"),
-        "amount": t("amount"),
-        "note": t("note"),
-    })
+    cols_to_drop = ["id"]
+    if "created_at" in display_df.columns:
+        cols_to_drop.append("created_at")
+    if "Created_at" in display_df.columns:
+        cols_to_drop.append("Created_at")
 
-    st.dataframe(display_df, use_container_width=True, hide_index=True)
+    display_df = display_df.drop(columns=cols_to_drop, errors="ignore")
+
+    table_columns = ["display_id", "date", "network", "transaction_type", "amount", "note"]
+    table_columns = [c for c in table_columns if c in display_df.columns]
+
+    column_config = {}
+    if hasattr(st, "column_config"):
+        try:
+            column_config = {
+                "display_id": st.column_config.TextColumn("#"),
+                "date": st.column_config.TextColumn(t("date")),
+                "network": st.column_config.TextColumn(t("network")),
+                "transaction_type": st.column_config.TextColumn(t("type")),
+                "amount": st.column_config.TextColumn(t("amount")),
+                "note": st.column_config.TextColumn(t("note")),
+            }
+        except Exception:
+            column_config = {}
+
+    st.dataframe(
+        display_df[table_columns],
+        use_container_width=True,
+        hide_index=True,
+        column_order=table_columns,
+        column_config=column_config,
+    )
 
     export_df = add_display_numbers(filtered)
     export_df["date"] = export_df["date"].dt.strftime(DISPLAY_DATE_FORMAT)
