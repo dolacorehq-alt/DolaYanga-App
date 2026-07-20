@@ -108,9 +108,15 @@ TRANSLATIONS = {
         "balance": "Estimated Balance",
         "monthly_breakdown": "Monthly Summary Breakdown",
         "monthly_insights_expander": "✨ Generate Monthly Insights",
-        "monthly_insights_description": "Get AI-generated insights from your current monthly view (coming soon).",
+        "monthly_insights_description": "Get AI-generated insights from your currently filtered transactions.",
         "monthly_insights_min_transactions": "AI insights require at least five transactions in the current view. Adjust your filters or add more transactions.",
         "monthly_insights_generate": "Generate Insights",
+        "monthly_insights_spinner": "Generating insights…",
+        "monthly_insights_missing_key": "Missing OpenAI API key. Add it to Streamlit Secrets to enable AI Monthly Insights.",
+        "monthly_insights_secrets_help": "Add this to `.streamlit/secrets.toml` (local) or Streamlit Cloud Secrets:",
+        "monthly_insights_missing_sdk": "The OpenAI Python SDK is not installed. Add the `openai` package to your environment to enable AI Monthly Insights.",
+        "monthly_insights_error": "Could not generate insights. Please try again.",
+        "monthly_insights_bad_format": "AI returned an unexpected format. Please click Generate Insights again.",
         "monthly_insights_placeholder": "Monthly Insights is coming soon. This button is a placeholder for the upcoming AI feature.",
         "monthly_insights_disclaimer": "AI insights are suggestions and may be inaccurate. Always verify before making financial decisions.",
         "transactions": "Transactions",
@@ -308,9 +314,15 @@ If you have questions about these Terms, contact: dolacorehq@gmail.com""",
         "balance": "Balance Yoyerekeza",
         "monthly_breakdown": "Chidule cha Miyezi",
         "monthly_insights_expander": "✨ Pangani Zozindikira za Mwezi",
-        "monthly_insights_description": "Pezani zozindikira (AI) kuchokera ku ma transaction a mwezi uno (ikubwera posachedwa).",
+        "monthly_insights_description": "Pezani zozindikira za AI kuchokera ku ma transaction omwe mwasankha (ma filter) pano.",
         "monthly_insights_min_transactions": "Zozindikira za AI zimafuna ma transaction osachepera asanu (5) mu view yomwe muli nayo pano. Sinthani ma filter kapena onjezani ma transaction.",
         "monthly_insights_generate": "Pangani Zozindikira",
+        "monthly_insights_spinner": "Ndikupanga zozindikira…",
+        "monthly_insights_missing_key": "Palibe OpenAI API key. Ikani mu Streamlit Secrets kuti AI Monthly Insights igwire ntchito.",
+        "monthly_insights_secrets_help": "Ikani izi mu `.streamlit/secrets.toml` (pa kompyuta yanu) kapena mu Streamlit Cloud Secrets:",
+        "monthly_insights_missing_sdk": "OpenAI Python SDK sinalowetsedwe. Onjezani package ya `openai` mu environment yanu kuti AI Monthly Insights igwire ntchito.",
+        "monthly_insights_error": "Sitinakwanitse kupanga zozindikira. Chonde yesaninso.",
+        "monthly_insights_bad_format": "AI yapereka format yosayenera. Dinani Pangani Zozindikira kachiwiri.",
         "monthly_insights_placeholder": "Monthly Insights ikubwera posachedwa. Batani ili ndi placeholder ya AI yomwe ikubwera.",
         "monthly_insights_disclaimer": "Zozindikira za AI ndi malingaliro ndipo zingakhale zolakwika. Nthawi zonse tsimikizani musanapange zisankho za ndalama.",
         "transactions": "Ma Transaction",
@@ -1008,6 +1020,391 @@ def calculate_summary(df):
 
     return today_spending, month_spending, total_received, total_spent, balance
 
+AI_INSIGHTS_TRANSACTION_FIELDS = ("date", "network", "transaction_type", "amount", "note")
+AI_INSIGHTS_MAX_TRANSACTIONS = 200
+
+def get_openai_api_key():
+    api_key = st.secrets.get("OPENAI_API_KEY", "")
+    if isinstance(api_key, str):
+        return api_key.strip()
+    return ""
+
+def _language_name(language_code):
+    return "English" if language_code == "en" else "Chichewa"
+
+def _make_insights_cache_key(df, language_code):
+    if df.empty:
+        return ""
+
+    safe_df = df.copy()
+    fields = [col for col in AI_INSIGHTS_TRANSACTION_FIELDS if col in safe_df.columns]
+    safe_df = safe_df[fields].copy()
+
+    if "date" in safe_df.columns:
+        safe_df["date"] = pd.to_datetime(safe_df["date"], errors="coerce").dt.strftime("%Y-%m-%d")
+
+    payload = json.dumps(
+        safe_df.to_dict(orient="records"),
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(f"{language_code}|{payload}".encode("utf-8")).hexdigest()
+
+def _build_monthly_insights_prompt(df, language_code, start_date_value, end_date_value, selected_network):
+    if df.empty:
+        raise ValueError("No transactions to summarize.")
+
+    data = df.copy()
+    data["date"] = pd.to_datetime(data["date"], errors="coerce")
+    data = data.sort_values(["date"], ascending=[False]).reset_index(drop=True)
+
+    spending_mask = data["transaction_type"].isin(SPENDING_TYPES)
+    total_received = float(data[data["transaction_type"] == "Money Received"]["amount"].sum())
+    total_spent = float(data[spending_mask]["amount"].sum())
+    balance = total_received - total_spent
+
+    categories_df = (
+        data[spending_mask]
+        .groupby("transaction_type")["amount"]
+        .agg(["sum", "count"])
+        .reset_index()
+        .sort_values("sum", ascending=False)
+    )
+
+    if categories_df.empty:
+        category_lines = ["- (no spending transactions in this view)"]
+    else:
+        category_lines = []
+        for row in categories_df.head(8).itertuples(index=False):
+            category_lines.append(
+                f"- {row.transaction_type}: MWK {format_money(row.sum)} ({int(row.count)} tx)"
+            )
+
+    safe_fields = [col for col in AI_INSIGHTS_TRANSACTION_FIELDS if col in data.columns]
+    safe_fields = [col for col in safe_fields if col != "created_at"]
+    tx_df = data[safe_fields].copy()
+
+    history_lines = []
+    for row in tx_df.head(AI_INSIGHTS_MAX_TRANSACTIONS).to_dict(orient="records"):
+        note = (row.get("note") or "").strip()
+        note = re.sub(r"\s+", " ", note)
+        note = note[:80]
+
+        amount_value = float(row.get("amount") or 0)
+        sign = "+" if row.get("transaction_type") == "Money Received" else "-"
+        amount_text = f"{sign}MWK {format_money(abs(amount_value))}"
+
+        date_value = row.get("date")
+        if isinstance(date_value, (pd.Timestamp, datetime)):
+            date_text = date_value.strftime("%Y-%m-%d")
+        else:
+            date_text = str(date_value)
+
+        network = row.get("network", "")
+        tx_type = row.get("transaction_type", "")
+        if note:
+            history_lines.append(f"- {date_text} | {network} | {tx_type} | {amount_text} | {note}")
+        else:
+            history_lines.append(f"- {date_text} | {network} | {tx_type} | {amount_text}")
+
+    if len(tx_df) > AI_INSIGHTS_MAX_TRANSACTIONS:
+        history_lines.append(f"- (showing {AI_INSIGHTS_MAX_TRANSACTIONS} of {len(tx_df)} transactions)")
+
+    language_name = _language_name(language_code)
+    network_text = "All Networks" if selected_network == "__all__" else selected_network
+
+    return f"""Language: {language_name}
+Country: Malawi
+Currency: MWK
+Filters: network={network_text}; date_range={start_date_value}..{end_date_value}
+
+Summary totals (from supplied data only):
+- Transactions in view: {len(data)}
+- Total received: MWK {format_money(total_received)}
+- Total spent: MWK {format_money(total_spent)}
+- Balance: MWK {format_money(balance)}
+
+Spending categories (sum, count):
+{chr(10).join(category_lines)}
+
+Transaction history (most recent first; fields: date, network, type, amount, note):
+{chr(10).join(history_lines)}
+"""
+
+def _extract_responses_text(response, debug=None):
+    def coerce_text(value):
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value
+        if isinstance(value, dict):
+            return str(value.get("value") or value.get("text") or "")
+        if hasattr(value, "value"):
+            try:
+                v = getattr(value, "value", "")
+                return v if isinstance(v, str) else str(v or "")
+            except Exception:
+                return ""
+        return str(value)
+
+    if response is None:
+        if debug is not None:
+            debug["extract"] = {"reason": "response_none"}
+        return ""
+
+    if isinstance(response, dict):
+        output_text = coerce_text(response.get("output_text"))
+        if output_text.strip():
+            if debug is not None:
+                debug["extract"] = {"path": "dict.output_text"}
+            return output_text.strip()
+        output_items = response.get("output") or []
+    else:
+        output_text = coerce_text(getattr(response, "output_text", None))
+        if output_text.strip():
+            if debug is not None:
+                debug["extract"] = {"path": "attr.output_text"}
+            return output_text.strip()
+        output_items = getattr(response, "output", None) or []
+
+    parts = []
+    for item in output_items:
+        content = getattr(item, "content", None) if not isinstance(item, dict) else item.get("content")
+        if not content:
+            continue
+        for c in content:
+            c_type = getattr(c, "type", None) if not isinstance(c, dict) else c.get("type")
+            if c_type in ("output_text", "text"):
+                text_value = getattr(c, "text", None) if not isinstance(c, dict) else c.get("text")
+                if text_value:
+                    if isinstance(text_value, dict):
+                        text_value = text_value.get("value") or text_value.get("text") or ""
+                    elif hasattr(text_value, "value"):
+                        text_value = getattr(text_value, "value", "")
+                    if text_value:
+                        parts.append(str(text_value))
+
+    extracted = "\n".join(parts).strip()
+    if debug is not None:
+        debug["extract"] = {
+            "path": "structured.output[*].content[*].text",
+            "parts": len(parts),
+            "chars": len(extracted),
+        }
+    return extracted
+
+def ai_insights_debug_enabled():
+    try:
+        secrets_flag = bool(st.secrets.get("DEBUG_AI_INSIGHTS", False))
+    except Exception:
+        secrets_flag = False
+
+    try:
+        qp = st.query_params.get("ai_debug", "")
+        if isinstance(qp, list):
+            qp = qp[0] if qp else ""
+        qp = str(qp).strip().lower()
+        qp_flag = qp in ("1", "true", "yes", "on")
+    except Exception:
+        qp_flag = False
+
+    return secrets_flag or qp_flag
+
+def _safe_preview(value, max_chars=8000):
+    try:
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            text = value
+        else:
+            text = repr(value)
+        text = text.strip()
+        if len(text) > max_chars:
+            return text[:max_chars] + "\n…(truncated)…"
+        return text
+    except Exception as error:
+        return f"(preview error: {error})"
+
+def _filtered_public_attrs(obj):
+    try:
+        attrs = [a for a in dir(obj) if not a.startswith("_")]
+    except Exception:
+        return []
+
+    keep_tokens = ("output", "text", "content", "model", "id", "dump", "usage", "error")
+    filtered = [a for a in attrs if any(tok in a.lower() for tok in keep_tokens)]
+    return sorted(filtered)[:120]
+
+def _parse_markdown_bullets(text):
+    if not text:
+        return []
+
+    cleaned = text.replace("\r\n", "\n").replace("\r", "\n")
+    cleaned = re.sub(r"```(?:markdown|md)?\n", "", cleaned, flags=re.IGNORECASE)
+    cleaned = cleaned.replace("```", "")
+
+    bullet_re = re.compile(r"^\s*(?:[-*]|[•–—·]|\d+[.)])\s+(.*)\s*$")
+    bullets = []
+    current = ""
+
+    for raw_line in cleaned.split("\n"):
+        line = raw_line.rstrip()
+        if not line.strip():
+            continue
+
+        match = bullet_re.match(line)
+        if match:
+            if current:
+                bullets.append(current.strip())
+            current = match.group(1).strip()
+        else:
+            if current:
+                current = f"{current} {line.strip()}".strip()
+
+    if current:
+        bullets.append(current.strip())
+
+    if not bullets:
+        inline_numbered = re.findall(r"(?:^|\s)\d+[.)]\s+([^\n]+)", cleaned.strip())
+        if inline_numbered:
+            bullets = [b.strip() for b in inline_numbered if b.strip()]
+        else:
+            chunks = re.split(r"(?:^|\s)(\d+[.)])\s+", cleaned.strip())
+            if len(chunks) > 1:
+                bullets = []
+                for piece in chunks:
+                    piece = piece.strip()
+                    if not piece or re.fullmatch(r"\d+[.)]", piece):
+                        continue
+                    bullets.append(piece)
+
+    if not bullets:
+        plain_lines = [line.strip() for line in cleaned.split("\n") if line.strip()]
+        if len(plain_lines) >= 5:
+            bullets = plain_lines[:5]
+        elif plain_lines:
+            combined = " ".join(plain_lines)
+            parts = re.split(r"\s*(?:•|;|\|)\s*", combined)
+            parts = [p.strip() for p in parts if p.strip()]
+            if len(parts) >= 5:
+                bullets = parts[:5]
+
+    return [re.sub(r"\s+", " ", b).strip() for b in bullets if b.strip()]
+
+def _normalize_insights_markdown(text):
+    bullets = _parse_markdown_bullets(text)
+    if len(bullets) < 5:
+        return None
+
+    bullets = bullets[:5]
+    return "\n".join([f"- {b}" for b in bullets])
+
+def generate_monthly_insights_markdown(df, start_date_value, end_date_value, selected_network):
+    api_key = get_openai_api_key()
+    if not api_key:
+        return None, "missing_key"
+
+    try:
+        from openai import OpenAI
+    except Exception:
+        return None, "missing_sdk"
+
+    language_code = st.session_state.language
+    system_instructions = (
+        "You are DolaYanga's financial assistant for Malawi.\n"
+        "Never invent transactions.\n"
+        "Respond only from supplied data.\n"
+        "Reply in the currently selected language.\n"
+        "Produce exactly five concise bullet points:\n"
+        "- Biggest spending category\n"
+        "- Unusual spending\n"
+        "- Income versus spending\n"
+        "- One important trend\n"
+        "- One practical financial recommendation\n"
+        "Output Markdown only. No headings, no extra text."
+    )
+
+    user_prompt = _build_monthly_insights_prompt(
+        df=df,
+        language_code=language_code,
+        start_date_value=start_date_value,
+        end_date_value=end_date_value,
+        selected_network=selected_network,
+    )
+
+    client = OpenAI(api_key=api_key)
+    debug = {"stage": "api_call"}
+    try:
+        response = client.responses.create(
+            model="gpt-5",
+            instructions=system_instructions,
+            input=user_prompt,
+            reasoning={"effort": "low"},
+            max_output_tokens=1400,
+            store=False,
+        )
+        debug["stage"] = "extract"
+        debug["response_type"] = str(type(response))
+        debug["has_output_text_attr"] = hasattr(response, "output_text")
+        debug["has_output_attr"] = hasattr(response, "output")
+
+        if ai_insights_debug_enabled():
+            debug["response_public_attrs"] = _filtered_public_attrs(response)
+            debug["response_output_text_preview"] = _safe_preview(getattr(response, "output_text", None))
+            debug["response_output_preview"] = _safe_preview(getattr(response, "output", None))
+            try:
+                debug["response_model"] = _safe_preview(getattr(response, "model", None))
+                debug["response_status"] = _safe_preview(getattr(response, "status", None))
+                debug["response_incomplete_details"] = _safe_preview(getattr(response, "incomplete_details", None))
+                debug["response_error"] = _safe_preview(getattr(response, "error", None))
+                debug["response_usage"] = _safe_preview(getattr(response, "usage", None))
+                output_text_value = getattr(response, "output_text", None)
+                output_text_str = output_text_value if isinstance(output_text_value, str) else ""
+                debug["response_output_text_empty"] = (not bool(output_text_str and output_text_str.strip()))
+            except Exception as meta_error:
+                debug["response_meta_error"] = str(meta_error)
+            if hasattr(response, "model_dump"):
+                try:
+                    dumped = response.model_dump()
+                    debug["response_model_dump_type"] = str(type(dumped))
+                    if isinstance(dumped, dict):
+                        debug["response_model_dump_keys"] = sorted(list(dumped.keys()))[:120]
+                    debug["response_model_dump_preview"] = _safe_preview(dumped)
+                except Exception as dump_error:
+                    debug["response_model_dump_error"] = str(dump_error)
+            if hasattr(response, "model_dump_json"):
+                try:
+                    dump_json = response.model_dump_json()
+                    debug["response_model_dump_json_preview"] = _safe_preview(dump_json)
+                except Exception as dump_json_error:
+                    debug["response_model_dump_json_error"] = str(dump_json_error)
+
+        raw_text = _extract_responses_text(response, debug=debug)
+        raw_text = (raw_text or "").strip()
+        debug["raw_text_chars"] = len(raw_text)
+        debug["raw_text_preview"] = raw_text[:4000]
+
+        debug["stage"] = "parse"
+        bullets = _parse_markdown_bullets(raw_text)
+        debug["parsed_bullets_count"] = len(bullets)
+        debug["parsed_bullets_preview"] = bullets[:8]
+
+        debug["stage"] = "normalize"
+        normalized = _normalize_insights_markdown(raw_text)
+        debug["normalized_ok"] = bool(normalized)
+        if not normalized:
+            debug["stage"] = "validation_failed"
+            return None, "bad_format"
+
+        debug["stage"] = "ok"
+        return normalized, None
+    except Exception as error:
+        debug["stage"] = "exception"
+        debug["exception"] = str(error)
+        raise
+    finally:
+        st.session_state.monthly_insights_debug = debug
+
 def show_summary_metrics(df):
     today_spending, month_spending, total_received, total_spent, balance = calculate_summary(df)
 
@@ -1415,25 +1812,76 @@ else:
 with st.expander(t("monthly_insights_expander"), expanded=False):
     st.caption(t("monthly_insights_description"))
 
+    selected_network = st.session_state.get("network_filter_value", "__all__")
+    start_date_value = st.session_state.get("start_date", date.today().replace(day=1))
+    end_date_value = st.session_state.get("end_date", date.today())
+
     visible_df = df_display.copy()
     if not visible_df.empty:
-        selected_network = st.session_state.get("network_filter_value", "__all__")
         if selected_network != "__all__":
             visible_df = visible_df[visible_df["network"] == selected_network]
 
-        start_date_value = st.session_state.get("start_date", date.today().replace(day=1))
-        end_date_value = st.session_state.get("end_date", date.today())
         visible_df = visible_df[
             (visible_df["date"].dt.date >= start_date_value)
             & (visible_df["date"].dt.date <= end_date_value)
         ]
 
+    current_insights_key = _make_insights_cache_key(visible_df, st.session_state.language)
+    if st.session_state.get("monthly_insights_key") != current_insights_key:
+        st.session_state.monthly_insights_key = current_insights_key
+        st.session_state.monthly_insights_markdown = ""
+
     if len(visible_df) < 5:
         st.info(t("monthly_insights_min_transactions"))
     else:
-        if st.button(t("monthly_insights_generate"), type="primary", use_container_width=True):
-            st.info(t("monthly_insights_placeholder"))
-            st.caption(t("monthly_insights_disclaimer"))
+        if st.button(
+            t("monthly_insights_generate"),
+            type="primary",
+            use_container_width=True,
+            key="monthly_insights_generate_button",
+        ):
+            error_message = ""
+            try:
+                with st.spinner(t("monthly_insights_spinner")):
+                    markdown, error_code = generate_monthly_insights_markdown(
+                        visible_df,
+                        start_date_value=start_date_value,
+                        end_date_value=end_date_value,
+                        selected_network=selected_network,
+                    )
+            except Exception as error:
+                markdown, error_code = None, "error"
+                error_message = str(error)
+
+            if error_code == "missing_key":
+                st.warning(t("monthly_insights_missing_key"))
+                st.caption(t("monthly_insights_secrets_help"))
+                st.markdown(
+                    '```toml\nOPENAI_API_KEY = "your_api_key_here"\n```',
+                )
+            elif error_code == "missing_sdk":
+                st.error(t("monthly_insights_missing_sdk"))
+            elif error_code == "bad_format":
+                st.error(t("monthly_insights_bad_format"))
+            elif error_code:
+                st.error(t("monthly_insights_error"))
+                if error_message:
+                    st.caption(error_message)
+            else:
+                st.session_state.monthly_insights_markdown = markdown or ""
+
+            if ai_insights_debug_enabled() and st.session_state.get("monthly_insights_debug") is not None:
+                debug = st.session_state.get("monthly_insights_debug") or {}
+                with st.expander("AI Insights Debug (temporary)", expanded=False):
+                    st.write(debug)
+                    raw_preview = debug.get("raw_text_preview") or ""
+                    if raw_preview:
+                        st.caption("Raw GPT-5 text (preview):")
+                        st.code(raw_preview, language="markdown")
+
+    if st.session_state.get("monthly_insights_markdown"):
+        st.markdown(st.session_state.monthly_insights_markdown)
+        st.caption(t("monthly_insights_disclaimer"))
 
 st.header(t("transactions"))
 
