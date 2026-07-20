@@ -1870,15 +1870,6 @@ with st.expander(t("monthly_insights_expander"), expanded=False):
             else:
                 st.session_state.monthly_insights_markdown = markdown or ""
 
-            if ai_insights_debug_enabled() and st.session_state.get("monthly_insights_debug") is not None:
-                debug = st.session_state.get("monthly_insights_debug") or {}
-                with st.expander("AI Insights Debug (temporary)", expanded=False):
-                    st.write(debug)
-                    raw_preview = debug.get("raw_text_preview") or ""
-                    if raw_preview:
-                        st.caption("Raw GPT-5 text (preview):")
-                        st.code(raw_preview, language="markdown")
-
     if st.session_state.get("monthly_insights_markdown"):
         st.markdown(st.session_state.monthly_insights_markdown)
         st.caption(t("monthly_insights_disclaimer"))
