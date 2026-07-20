@@ -84,6 +84,24 @@ Insights are generated from the user's transaction data and respect the selected
 
 The AI feature is designed to provide helpful suggestions and should not replace professional financial advice. Users are encouraged to verify information before making financial decisions.
 
+## Screenshots
+
+### Login
+
+![Login](screenshots/Login.png)
+
+### Transaction Dashboard
+
+![Dashboard](screenshots/Transactions.png)
+
+### GPT-5 Monthly Insights
+
+![Monthly Insights](screenshots/AI Insights.png)
+
+### Mobile Experience
+
+![Mobile View](screenshots/Mobile.png)
+
 ---
 
 # Features
