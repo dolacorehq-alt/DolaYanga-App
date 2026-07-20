@@ -36,7 +36,7 @@ The application was designed specifically around the needs of Malawian mobile mo
 
 DolaYanga existed before OpenAI Build Week.
 
-During the Build Week submission period, the project was meaningfully extended using **OpenAI Codex** and OpenAI AI capabilities. New functionality and improvements added during Build Week include:
+During the Build Week submission period, the project was meaningfully extended using OpenAI Codex and GPT-5-powered AI capabilities. New functionality and improvements added during Build Week include:
 
 - GPT-powered AI Monthly Insights
 - AI-generated financial observations and recommendations
@@ -88,19 +88,19 @@ The AI feature is designed to provide helpful suggestions and should not replace
 
 ### Login
 
-![Login](screenshots/Login.png)
+![Login](screenshots/login.png)
 
 ### Transaction Dashboard
 
-![Dashboard](screenshots/Transactions.png)
+![Dashboard](screenshots/transactions.png)
 
 ### GPT-5 Monthly Insights
 
-![Monthly Insights](screenshots/AI Insights.png)
+![Monthly Insights](screenshots/ai-insights.png)
 
 ### Mobile Experience
 
-![Mobile View](screenshots/Mobile.png)
+![Mobile View](screenshots/mobile.png)
 
 ---
 
